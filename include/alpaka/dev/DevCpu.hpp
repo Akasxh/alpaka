@@ -6,7 +6,7 @@
 #pragma once
 
 #include "alpaka/dev/Traits.hpp"
-#include "alpaka/dev/common/QueueRegistry.hpp"
+#include "alpaka/dev/common/DevGenericImpl.hpp"
 #include "alpaka/dev/cpu/SysInfo.hpp"
 #include "alpaka/mem/buf/Traits.hpp"
 #include "alpaka/platform/Traits.hpp"
@@ -46,7 +46,7 @@ namespace alpaka
     namespace cpu::detail
     {
         //! The CPU device implementation.
-        using DevCpuImpl = alpaka::detail::QueueRegistry<cpu::ICpuQueue>;
+        using DevCpuImpl = alpaka::detail::DevGenericImpl<cpu::ICpuQueue>;
     } // namespace cpu::detail
 
     //! The CPU device handle.
@@ -89,19 +89,32 @@ namespace alpaka
             return 0;
         }
 
+        static void setDeviceProperties(alpaka::DevCpu const&, alpaka::DeviceProperties& devProperties)
+        {
+            devProperties.name = cpu::detail::getCpuName();
+            devProperties.totalGlobalMem = cpu::detail::getTotalGlobalMemSizeBytes();
+        }
+
+        friend struct trait::GetName<DevCpu>;
+        friend struct trait::GetMemBytes<DevCpu>;
+        friend struct trait::GetFreeMemBytes<DevCpu>;
+        friend struct trait::GetWarpSizes<DevCpu>;
+        friend struct trait::GetPreferredWarpSize<DevCpu>;
+
     private:
         std::shared_ptr<cpu::detail::DevCpuImpl> m_spDevCpuImpl;
     };
 
     namespace trait
     {
+
         //! The CPU device name get trait specialization.
         template<>
         struct GetName<DevCpu>
         {
-            ALPAKA_FN_HOST static auto getName(DevCpu const& /* dev */) -> std::string
+            ALPAKA_FN_HOST static auto getName(DevCpu const& dev) -> std::string
             {
-                return cpu::detail::getCpuName();
+                return dev.m_spDevCpuImpl->deviceProperties(dev)->name;
             }
         };
 
@@ -109,9 +122,9 @@ namespace alpaka
         template<>
         struct GetMemBytes<DevCpu>
         {
-            ALPAKA_FN_HOST static auto getMemBytes(DevCpu const& /* dev */) -> std::size_t
+            ALPAKA_FN_HOST static auto getMemBytes(DevCpu const& dev) -> std::size_t
             {
-                return cpu::detail::getTotalGlobalMemSizeBytes();
+                return dev.m_spDevCpuImpl->deviceProperties(dev)->totalGlobalMem;
             }
         };
 

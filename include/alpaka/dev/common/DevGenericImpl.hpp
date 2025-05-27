@@ -5,19 +5,22 @@
 #pragma once
 
 #include "alpaka/core/Common.hpp"
+#include "alpaka/dev/common/DeviceProperties.hpp"
 
 #include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace alpaka::detail
 {
+
     //! The CPU/GPU device queue registry implementation.
     //!
     //! @tparam TQueue queue implementation
     template<typename TQueue>
-    struct QueueRegistry
+    struct DevGenericImpl
     {
         ALPAKA_FN_HOST auto getAllExistingQueues() const -> std::vector<std::shared_ptr<TQueue>>
         {
@@ -52,8 +55,24 @@ namespace alpaka::detail
             m_queues.push_back(spQueue);
         }
 
+        template<typename TDev>
+        auto deviceProperties(TDev const& device) -> std::optional<alpaka::DeviceProperties>&
+        {
+            std::call_once(
+                m_onceFlag,
+                [&]() noexcept
+                {
+                    m_deviceProperties = std::make_optional<alpaka::DeviceProperties>();
+                    TDev::setDeviceProperties(device, *m_deviceProperties);
+                });
+
+            return m_deviceProperties;
+        }
+
     private:
         std::mutex mutable m_Mutex;
+        std::once_flag m_onceFlag;
+        std::optional<alpaka::DeviceProperties> m_deviceProperties;
         std::deque<std::weak_ptr<TQueue>> mutable m_queues;
     };
 } // namespace alpaka::detail
