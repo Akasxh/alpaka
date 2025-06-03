@@ -5,12 +5,15 @@
 #pragma once
 
 #include "alpaka/core/ApiCudaRt.hpp"
-#include "alpaka/mem/buf/BufUniformCudaHipRt.hpp"
+#include "alpaka/mem/buf/uniformCudaHip/BufUniformCudaHipRt.hpp"
 
 #ifdef ALPAKA_ACC_GPU_CUDA_ENABLED
 
 namespace alpaka
 {
+    template<typename TElem, typename TDim, typename TIdx>
+    using ConstBufCudaRt = ConstBufUniformCudaHipRt<ApiCudaRt, TElem, TDim, TIdx>;
+
     template<typename TElem, typename TDim, typename TIdx>
     using BufCudaRt = BufUniformCudaHipRt<ApiCudaRt, TElem, TDim, TIdx>;
 } // namespace alpaka

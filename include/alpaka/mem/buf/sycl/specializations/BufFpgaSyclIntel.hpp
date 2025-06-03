@@ -4,12 +4,15 @@
 
 #pragma once
 
-#include "alpaka/mem/buf/BufGenericSycl.hpp"
+#include "alpaka/mem/buf/sycl/BufGenericSycl.hpp"
 
 #if defined(ALPAKA_ACC_SYCL_ENABLED) && defined(ALPAKA_SYCL_ONEAPI_FPGA)
 
 namespace alpaka
 {
+    template<typename TElem, typename TDim, typename TIdx>
+    using ConstBufFpgaSyclIntel = ConstBufGenericSycl<TElem, TDim, TIdx, TagFpgaSyclIntel>;
+
     template<typename TElem, typename TDim, typename TIdx>
     using BufFpgaSyclIntel = BufGenericSycl<TElem, TDim, TIdx, TagFpgaSyclIntel>;
 } // namespace alpaka

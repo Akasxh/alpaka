@@ -1,66 +1,23 @@
-/* Copyright 2024 Jan Stephan, Luca Ferragina, Aurora Perego, Andrea Bocci
+/* Copyright 2025 Anton Reinhard
  * SPDX-License-Identifier: MPL-2.0
  */
 
 #pragma once
 
-#include "alpaka/core/Sycl.hpp"
-#include "alpaka/dev/DevGenericSycl.hpp"
-#include "alpaka/dev/Traits.hpp"
-#include "alpaka/dim/DimIntegralConst.hpp"
-#include "alpaka/dim/Traits.hpp"
-#include "alpaka/mem/buf/BufCpu.hpp"
 #include "alpaka/mem/buf/Traits.hpp"
-#include "alpaka/mem/view/ViewAccessOps.hpp"
-#include "alpaka/vec/Vec.hpp"
-
-#include <memory>
-#include <type_traits>
+#include "alpaka/mem/buf/sycl/BufGenericSycl.hpp"
 
 #ifdef ALPAKA_ACC_SYCL_ENABLED
 
-#    include <sycl/sycl.hpp>
-
-namespace alpaka
-{
-    //! The SYCL memory buffer.
-    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
-    class BufGenericSycl : public internal::ViewAccessOps<BufGenericSycl<TElem, TDim, TIdx, TTag>>
-    {
-    public:
-        static_assert(
-            !std::is_const_v<TElem>,
-            "The elem type of the buffer can not be const because the C++ Standard forbids containers of const "
-            "elements!");
-        static_assert(!std::is_const_v<TIdx>, "The idx type of the buffer can not be const!");
-
-        //! Constructor
-        template<typename TExtent, typename Deleter>
-        BufGenericSycl(DevGenericSycl<TTag> const& dev, TElem* const pMem, Deleter deleter, TExtent const& extent)
-            : m_dev{dev}
-            , m_extentElements{getExtentVecEnd<TDim>(extent)}
-            , m_spMem(pMem, std::move(deleter))
-        {
-            ALPAKA_DEBUG_MINIMAL_LOG_SCOPE;
-
-            static_assert(
-                TDim::value == Dim<TExtent>::value,
-                "The dimensionality of TExtent and the dimensionality of the TDim template parameter have to be "
-                "identical!");
-
-            static_assert(
-                std::is_same_v<TIdx, Idx<TExtent>>,
-                "The idx type of TExtent and the TIdx template parameter have to be identical!");
-        }
-
-        DevGenericSycl<TTag> m_dev;
-        Vec<TDim, TIdx> m_extentElements;
-        std::shared_ptr<TElem> m_spMem;
-    };
-} // namespace alpaka
-
 namespace alpaka::trait
 {
+    //! The SYCL device memory buffer type trait specialization.
+    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
+    struct BufType<DevGenericSycl<TTag>, TElem, TDim, TIdx>
+    {
+        using type = BufGenericSycl<TElem, TDim, TIdx, TTag>;
+    };
+
     //! The BufGenericSycl device type trait specialization.
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct DevType<BufGenericSycl<TElem, TDim, TIdx, TTag>>
@@ -72,13 +29,13 @@ namespace alpaka::trait
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct GetDev<BufGenericSycl<TElem, TDim, TIdx, TTag>>
     {
-        static auto getDev(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf)
+        ALPAKA_FN_HOST static auto getDev(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf) -> DevGenericSycl<TTag>
         {
-            return buf.m_dev;
+            return buf.m_spBufImpl->m_dev;
         }
     };
 
-    //! The BufGenericSycl dimension getter trait specialization.
+    //! The BufGenericSycl dimension getter trait.
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct DimType<BufGenericSycl<TElem, TDim, TIdx, TTag>>
     {
@@ -92,13 +49,13 @@ namespace alpaka::trait
         using type = TElem;
     };
 
-    //! The BufGenericSycl extent get trait specialization.
+    //! The BufGenericSycl width get trait specialization.
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct GetExtents<BufGenericSycl<TElem, TDim, TIdx, TTag>>
     {
-        auto operator()(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf) const
+        ALPAKA_FN_HOST auto operator()(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf)
         {
-            return buf.m_extentElements;
+            return buf.m_spBufImpl->m_extentElements;
         }
     };
 
@@ -106,14 +63,14 @@ namespace alpaka::trait
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct GetPtrNative<BufGenericSycl<TElem, TDim, TIdx, TTag>>
     {
-        static auto getPtrNative(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf) -> TElem const*
+        ALPAKA_FN_HOST static auto getPtrNative(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf) -> TElem const*
         {
-            return buf.m_spMem.get();
+            return buf.m_spBufImpl->m_pMem;
         }
 
-        static auto getPtrNative(BufGenericSycl<TElem, TDim, TIdx, TTag>& buf) -> TElem*
+        ALPAKA_FN_HOST static auto getPtrNative(BufGenericSycl<TElem, TDim, TIdx, TTag>& buf) -> TElem*
         {
-            return buf.m_spMem.get();
+            return buf.m_spBufImpl->m_pMem;
         }
     };
 
@@ -121,12 +78,13 @@ namespace alpaka::trait
     template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
     struct GetPtrDev<BufGenericSycl<TElem, TDim, TIdx, TTag>, DevGenericSycl<TTag>>
     {
-        static auto getPtrDev(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf, DevGenericSycl<TTag> const& dev)
-            -> TElem const*
+        ALPAKA_FN_HOST static auto getPtrDev(
+            BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf,
+            DevGenericSycl<TTag> const& dev) -> TElem const*
         {
             if(dev == getDev(buf))
             {
-                return buf.m_spMem.get();
+                return buf.m_spBufImpl->m_pMem;
             }
             else
             {
@@ -134,16 +92,52 @@ namespace alpaka::trait
             }
         }
 
-        static auto getPtrDev(BufGenericSycl<TElem, TDim, TIdx, TTag>& buf, DevGenericSycl<TTag> const& dev) -> TElem*
+        ALPAKA_FN_HOST static auto getPtrDev(
+            BufGenericSycl<TElem, TDim, TIdx, TTag>& buf,
+            DevGenericSycl<TTag> const& dev) -> TElem*
         {
             if(dev == getDev(buf))
             {
-                return buf.m_spMem.get();
+                return buf.m_spBufImpl->m_pMem;
             }
             else
             {
                 throw std::runtime_error("The buffer is not accessible from the given device!");
             }
+        }
+    };
+
+    //! The BufGenericSycl offset get trait specialization.
+    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
+    struct GetOffsets<BufGenericSycl<TElem, TDim, TIdx, TTag>>
+    {
+        ALPAKA_FN_HOST auto operator()(BufGenericSycl<TElem, TDim, TIdx, TTag> const& /*buf*/) const -> Vec<TDim, TIdx>
+        {
+            return Vec<TDim, TIdx>::zeros();
+        }
+    };
+
+    //! The BufGenericSycl idx type trait specialization.
+    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
+    struct IdxType<BufGenericSycl<TElem, TDim, TIdx, TTag>>
+    {
+        using type = TIdx;
+    };
+
+    //! The MakeConstBuf trait for Sycl buffers.
+    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
+    struct MakeConstBuf<BufGenericSycl<TElem, TDim, TIdx, TTag>>
+    {
+        ALPAKA_FN_HOST static auto makeConstBuf(BufGenericSycl<TElem, TDim, TIdx, TTag> const& buf)
+            -> ConstBufGenericSycl<TElem, TDim, TIdx, TTag>
+        {
+            return ConstBufGenericSycl<TElem, TDim, TIdx, TTag>(buf);
+        }
+
+        ALPAKA_FN_HOST static auto makeConstBuf(BufGenericSycl<TElem, TDim, TIdx, TTag>&& buf)
+            -> ConstBufGenericSycl<TElem, TDim, TIdx, TTag>
+        {
+            return ConstBufGenericSycl<TElem, TDim, TIdx, TTag>(std::move(buf));
         }
     };
 
@@ -152,7 +146,7 @@ namespace alpaka::trait
     struct BufAlloc<TElem, TDim, TIdx, DevGenericSycl<TTag>>
     {
         template<typename TExtent>
-        static auto allocBuf(DevGenericSycl<TTag> const& dev, TExtent const& extent)
+        ALPAKA_FN_HOST static auto allocBuf(DevGenericSycl<TTag> const& dev, TExtent const& extent)
             -> BufGenericSycl<TElem, TDim, TIdx, TTag>
         {
             ALPAKA_DEBUG_MINIMAL_LOG_SCOPE;
@@ -205,14 +199,10 @@ namespace alpaka::trait
     {
     };
 
-    //! The BufGenericSycl offset get trait specialization.
-    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
-    struct GetOffsets<BufGenericSycl<TElem, TDim, TIdx, TTag>>
+    //! The pinned/mapped memory allocation capability trait specialization.
+    template<concepts::Tag TTag>
+    struct HasMappedBufSupport<PlatformGenericSycl<TTag>> : public std::true_type
     {
-        auto operator()(BufGenericSycl<TElem, TDim, TIdx, TTag> const&) const -> Vec<TDim, TIdx>
-        {
-            return Vec<TDim, TIdx>::zeros();
-        }
     };
 
     //! The pinned/mapped memory allocation trait specialization for the SYCL devices.
@@ -220,7 +210,7 @@ namespace alpaka::trait
     struct BufAllocMapped<PlatformGenericSycl<TTag>, TElem, TDim, TIdx>
     {
         template<typename TExtent>
-        static auto allocMappedBuf(
+        ALPAKA_FN_HOST static auto allocMappedBuf(
             DevCpu const& host,
             PlatformGenericSycl<TTag> const& platform,
             TExtent const& extent) -> BufCpu<TElem, TDim, TIdx>
@@ -237,36 +227,6 @@ namespace alpaka::trait
         }
     };
 
-    //! The pinned/mapped memory allocation capability trait specialization.
-    template<concepts::Tag TTag>
-    struct HasMappedBufSupport<PlatformGenericSycl<TTag>> : public std::true_type
-    {
-    };
-
-    //! The BufGenericSycl idx type trait specialization.
-    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
-    struct IdxType<BufGenericSycl<TElem, TDim, TIdx, TTag>>
-    {
-        using type = TIdx;
-    };
-
-    //! The BufCpu pointer on SYCL device get trait specialization.
-    template<typename TElem, typename TDim, typename TIdx, concepts::Tag TTag>
-    struct GetPtrDev<BufCpu<TElem, TDim, TIdx>, DevGenericSycl<TTag>>
-    {
-        static auto getPtrDev(BufCpu<TElem, TDim, TIdx> const& buf, DevGenericSycl<TTag> const&) -> TElem const*
-        {
-            return getPtrNative(buf);
-        }
-
-        static auto getPtrDev(BufCpu<TElem, TDim, TIdx>& buf, DevGenericSycl<TTag> const&) -> TElem*
-        {
-            return getPtrNative(buf);
-        }
-    };
 } // namespace alpaka::trait
-
-#    include "alpaka/mem/buf/sycl/Copy.hpp"
-#    include "alpaka/mem/buf/sycl/Set.hpp"
 
 #endif

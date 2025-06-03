@@ -22,6 +22,10 @@ namespace alpaka
         template<typename TDev, typename TElem, typename TDim, typename TIdx, typename TSfinae = void>
         struct BufType;
 
+        //! The memory const-buffer type trait.
+        template<typename TDev, typename TElem, typename TDim, typename TIdx, typename TSfinae = void>
+        struct ConstBufType;
+
         //! The memory allocator trait.
         template<typename TElem, typename TDim, typename TIdx, typename TDev, typename TSfinae = void>
         struct BufAlloc;
@@ -45,11 +49,20 @@ namespace alpaka
         struct HasMappedBufSupport : public std::false_type
         {
         };
+
+        //! The trait to transform a mutable buffer into a constant one.
+        template<typename TBuf>
+        struct MakeConstBuf;
+
     } // namespace trait
 
-    //! The memory buffer type trait alias template to remove the ::type.
+    //! The memory buffer type trait alias template to remove the ::type for a Buffer type.
     template<typename TDev, typename TElem, typename TDim, typename TIdx>
     using Buf = typename trait::BufType<alpaka::Dev<TDev>, TElem, TDim, TIdx>::type;
+
+    //! The memory buffer type trait alias template to remove the ::type for a ConstBuffer type.
+    template<typename TDev, typename TElem, typename TDim, typename TIdx>
+    using ConstBuf = typename trait::ConstBufType<alpaka::Dev<TDev>, TElem, TDim, TIdx>::type;
 
     //! Allocates memory on the given device.
     //!
@@ -189,4 +202,22 @@ namespace alpaka
 
         ALPAKA_UNREACHABLE(allocBuf<TElem, TIdx>(host, extent));
     }
+
+    //! Creates a constant buffer from the given mutable buffer.
+    //!
+    //! \tparam TBuf The type of the original buffer.
+    //! \param buf The original buffer.
+    //! \return The transformed buffer with only read-access allowed.
+    template<typename TBuf>
+    ALPAKA_FN_HOST auto makeConstBuf(TBuf const& buf)
+    {
+        return trait::MakeConstBuf<TBuf>::makeConstBuf(buf);
+    }
+
+    template<typename TBuf>
+    ALPAKA_FN_HOST auto makeConstBuf(TBuf&& buf)
+    {
+        return trait::MakeConstBuf<std::remove_cvref_t<TBuf>>::makeConstBuf(std::move(buf));
+    }
+
 } // namespace alpaka
