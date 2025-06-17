@@ -1,5 +1,4 @@
 #include <alpaka/alpaka.hpp>
-#include <alpaka/example/ExecuteForEachAccTag.hpp>
 
 #include <cublas_v2.h>
 #include <chrono>
@@ -179,12 +178,11 @@ auto example(TAccTag const&, int iterations) -> int
 int main(int argc, char* argv[])
 {
     int iterations = 100;
-    if(argc > 1)
-    {
+    if (argc > 1)
         iterations = std::atoi(argv[1]);
-    }
-    std::cout << "Check enabled accelerator tags:" << std::endl;
-    alpaka::printTagNames<alpaka::EnabledAccTags>();
-    return alpaka::executeForEachAccTag([=](auto const& tag) { return example(tag, iterations); });
+
+    // Run the benchmark exclusively on the CUDA accelerator
+    return example(alpaka::TagGpuCudaRt{}, iterations);
 }
+
 
