@@ -5,18 +5,13 @@ set(_TARGET_NAME runtimeBlasGemm)
 project(${_TARGET_NAME} LANGUAGES CXX)
 
 set(BLAS_LIBS)
-if(alpaka_ACC_GPU_CUDA_ONLY_MODE)
+if(alpaka_ACC_GPU_CUDA_ONLY_MODE OR ALPAKA_ACC_GPU_CUDA_ENABLED)
     find_package(CUDA REQUIRED)
     list(APPEND BLAS_LIBS ${CUDA_LIBRARIES} cublas)
 endif()
 if(alpaka_ACC_GPU_HIP_ONLY_MODE)
     find_package(rocblas REQUIRED CONFIG)
     list(APPEND BLAS_LIBS rocblas)
-endif()
-
-if(NOT BLAS_LIBS)
-    message(WARNING "Skipping build of '${_TARGET_NAME}' because no GPU backend is enabled.")
-    return()
 endif()
 
 if(NOT TARGET alpaka::alpaka)
@@ -31,7 +26,7 @@ endif()
 
 alpaka_add_executable(
     ${_TARGET_NAME}
-    src/runtimeBlasGemm.cpp)
+    src/example_gemm.cpp)
 
 target_link_libraries(
     ${_TARGET_NAME}
